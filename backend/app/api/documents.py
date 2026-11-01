@@ -8,7 +8,6 @@ from pydantic import BaseModel, Field
 from backend.app.services.ingestion import ingest_pdf
 from backend.app.services.retrieval import search_documents
 from backend.app.services.qa_service import answer_question
-from backend.app.services.indiclid_service import IndicLIDService
 from backend.app.services.gemini_service import GeminiServiceUnavailableError
 from backend.app.services.sarvam_tts_service import (
     SarvamTTSUnavailableError,
@@ -50,6 +49,8 @@ async def upload_document(
     document_language: str = Form(default="auto"),
 ):
     """Upload a policy PDF; detect its source language automatically by default."""
+
+    from backend.app.services.indiclid_service import IndicLIDService
 
     indiclid_service = request.app.state.indiclid_service
     if indiclid_service is None:
