@@ -1,5 +1,6 @@
 
 from contextlib import asynccontextmanager
+import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -40,12 +41,23 @@ app = FastAPI(
 )
 
 
-# Allow our React frontend to communicate with the backend.
+# Allow local development and the deployed React frontend to call the API.
+# FRONTEND_URL may contain a comma-separated list of deployed frontend origins.
+frontend_origins = [
+    origin.strip().rstrip("/")
+    for origin in os.getenv(
+        "FRONTEND_URL",
+        "https://nitisaathi-frontend.onrender.com",
+    ).split(",")
+    if origin.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        *frontend_origins,
     ],
     allow_credentials=True,
     allow_methods=["*"],
