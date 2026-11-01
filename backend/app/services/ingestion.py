@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 from pathlib import Path
 from uuid import uuid4
+from typing import TYPE_CHECKING
 import json
 
 import pymupdf as fitz
@@ -8,7 +11,8 @@ from fastapi import HTTPException, UploadFile
 from backend.app.services.chunking import create_chunks
 from backend.app.services.vector_store import index_chunks
 from backend.app.models.policy import PolicyDocument
-from backend.app.services.indiclid_service import IndicLIDService
+if TYPE_CHECKING:
+    from backend.app.services.indiclid_service import IndicLIDService
 from backend.app.services.language_analysis import analyze_page_languages
 from backend.app.services.ocr_service import (
     LocalOCRError,
