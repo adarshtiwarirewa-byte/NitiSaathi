@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.app.api.documents import router as documents_router
+from backend.app.api.research import router as research_router
 from backend.app.services.indiclid_service import IndicLIDService
 
 
@@ -58,6 +59,14 @@ app.include_router(
     documents_router,
     prefix="/documents",
     tags=["Documents"],
+)
+
+
+# Register the isolated web-research API.
+app.include_router(
+    research_router,
+    prefix="/research",
+    tags=["Web Research"],
 )
 
 
