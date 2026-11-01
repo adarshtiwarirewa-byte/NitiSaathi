@@ -128,9 +128,13 @@ def _grounded_sources(response) -> tuple[list[dict], list[dict]]:
         chunks.append({
             "text": "\n".join(dict.fromkeys(passages)),
             "document_id": f"web-source-{source_number}",
-            "filename": source["title"],
+            "filename": f"[{source['source_type']}] {source['title']}",
             "page_number": 1,
-            "language_label": "Web research evidence",
+            "language_label": (
+                "Official government web evidence"
+                if source["source_type"] == "official_government"
+                else "Supporting publication evidence"
+            ),
             "language_code": None,
             "script": None,
             "source_url": source["url"],
