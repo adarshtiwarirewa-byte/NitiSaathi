@@ -133,9 +133,13 @@ type DocumentInfo = {
 
 type Citation = {
   source_number: number;
-  document_id: string;
+  document_id?: string;
   filename: string;
-  page_number: number;
+  page_number?: number;
+  url?: string;
+  domain?: string;
+  source_type?: string;
+  retrieved_at?: string;
 };
 
 type Point = {
@@ -150,6 +154,7 @@ type Section = {
 };
 
 type Explanation = {
+  source_mode?: "document" | "web_research";
   question: string;
   answer_language: string;
   sources: Citation[];
@@ -257,10 +262,6 @@ function App() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const speechAbortRef = useRef<AbortController | null>(null);
 
-  const selectedDocument = documents.find(
-    (doc) => doc.document_id === documentId,
-  );
-
   const refreshDocuments = async (): Promise<DocumentInfo[]> => {
     const response = await fetch(`${API_URL}/documents`);
     if (!response.ok) throw new Error("Could not load the policy library.");
@@ -289,11 +290,11 @@ function App() {
       try {
         const response = await fetch(`${API_URL}/health`);
         if (!response.ok) throw new Error("Backend unavailable");
-        const items = await refreshDocuments();
+        await refreshDocuments();
 
         if (mounted) {
+          // No auto-selected PDF: an empty selection starts web research.
           setApiStatus("online");
-          if (items[0]) setDocumentId(items[0].document_id);
         }
       } catch {
         if (mounted) setApiStatus("offline");
@@ -327,6 +328,7 @@ function App() {
     stopSpeech();
     setError("");
     setFile(selected);
+    setDocumentId("");
     setAnswer(null);
     setPage(null);
     setNotice("");
@@ -378,11 +380,10 @@ function App() {
       setError("Write a question or choose a sample question first.");
       return;
     }
-    if (!documentId) {
-      setError("Choose or upload a policy document first.");
+    if (file && !documentId) {
+      setError("Your PDF is selected but not indexed yet. Click “Add this document” first.");
       return;
     }
-
     stopSpeech();
     setQuestion(prompt);
     setBusy(true);
@@ -391,15 +392,14 @@ function App() {
     setPage(null);
 
     try {
-      const response = await fetch(`${API_URL}/documents/ask`, {
+      const endpoint = documentId ? "/documents/ask" : "/research/ask";
+      const payload = documentId
+        ? { question: prompt, language, top_k: 4, document_id: documentId }
+        : { question: prompt, language, top_k: 6 };
+      const response = await fetch(`${API_URL}${endpoint}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          question: prompt,
-          language,
-          top_k: 4,
-          document_id: documentId,
-        }),
+        body: JSON.stringify(payload),
       });
       const data = await response.json().catch(() => null);
 
@@ -425,6 +425,14 @@ function App() {
   };
 
   const openCitation = async (source: Citation) => {
+    if (source.url) {
+      window.open(source.url, "_blank", "noopener,noreferrer");
+      return;
+    }
+    if (!source.document_id || !source.page_number) {
+      setError("This source cannot be opened.");
+      return;
+    }
     try {
       const response = await fetch(
         `${API_URL}/documents/${source.document_id}/pages/${source.page_number}`,
@@ -634,8 +642,8 @@ function App() {
           <div className="section-heading">
             <div>
               <span className="section-eyebrow">YOUR POLICY DESK</span>
-              <h2>Understand a document.</h2>
-              <p>Choose a policy, ask a practical question, and check the evidence.</p>
+              <h2>Understand a policy.</h2>
+              <p>Choose a PDF or ask without one. NitiSaathi will find the evidence.</p>
             </div>
             <span className="step-label">2 SIMPLE STEPS</span>
           </div>
@@ -784,16 +792,20 @@ function App() {
               <button
                 className="ask-button"
                 type="button"
-                disabled={busy || apiStatus !== "online" || !documentId}
+                disabled={busy || apiStatus !== "online" || Boolean(file && !documentId)}
                 onClick={() => void ask()}
               >
-                {busy ? "Finding evidence…" : "Explain this policy"}
+                {busy
+                  ? (documentId ? "Finding document evidence…" : "Researching government sources…")
+                  : (documentId ? "Explain this policy" : "Research government sources")}
                 <span>→</span>
               </button>
               <p className="coming-soon">
-                {!selectedDocument && documents.length === 0
-                  ? "Upload a policy PDF to begin."
-                  : "Shortcut: Ctrl + Enter"}
+                {documentId
+                  ? "Using your selected PDF · Shortcut: Ctrl + Enter"
+                  : file
+                    ? "Add this PDF to use it, or clear the selection to research the web."
+                    : "No PDF selected — NitiSaathi will automatically research reliable web sources."}
               </p>
             </section>
           </div>
@@ -819,7 +831,7 @@ function App() {
               <div className="answer-heading">
                 <div>
                   <span className="section-eyebrow">
-                    YOUR EXPLANATION · {answer.answer_language}
+                    {answer.source_mode === "web_research" ? "WEB RESEARCH" : "YOUR EXPLANATION"} · {answer.answer_language}
                   </span>
                   <h2>{answer.question}</h2>
                 </div>
@@ -853,7 +865,9 @@ function App() {
                             <span className="basis-label">
                               {point.evidence_basis === "cautious_interpretation"
                                 ? "Plain-language interpretation"
-                                : "Stated in the document"}
+                                : answer.source_mode === "web_research"
+                                  ? "Supported by web evidence"
+                                  : "Stated in the document"}
                             </span>
                             <div className="point-citations">
                               {point.source_numbers.map((number) => {
@@ -867,7 +881,9 @@ function App() {
                                     key={number}
                                     onClick={() => void openCitation(source)}
                                   >
-                                    Source {number} · p. {source.page_number} ↗
+                                    {source.page_number
+                                      ? `Source ${number} · p. ${source.page_number} ↗`
+                                      : `Source ${number} · web ↗`}
                                   </button>
                                 ) : null;
                               })}
@@ -880,7 +896,9 @@ function App() {
 
                   {answer.information_not_found.length > 0 && (
                     <div className="missing-info">
-                      <strong>What the document doesn’t tell us</strong>
+                      <strong>{answer.source_mode === "web_research"
+                        ? "What reliable sources did not establish"
+                        : "What the document doesn’t tell us"}</strong>
                       <ul>
                         {answer.information_not_found.map((item, index) => (
                           <li key={index}>{item}</li>
@@ -893,8 +911,9 @@ function App() {
                     <div className="missing-info">
                       <strong>No supporting passage found</strong>
                       <p>
-                        The selected document did not provide enough evidence to answer this question.
-                        Try asking about a topic that appears in it.
+                        {answer.source_mode === "web_research"
+                          ? "The search did not provide enough source-linked evidence to answer this question."
+                          : "The selected document did not provide enough evidence to answer this question. Try asking about a topic that appears in it."}
                       </p>
                     </div>
                   )}
@@ -912,10 +931,14 @@ function App() {
                       >
                         <span>
                           Source {source.source_number}
-                          <b>Page {source.page_number}</b>
+                          <b>{source.page_number
+                            ? `Page ${source.page_number}`
+                            : source.source_type === "official_government"
+                              ? "Official government"
+                              : "Supporting article"}</b>
                         </span>
                         <strong>{source.filename}</strong>
-                        <small>Open passage ↗</small>
+                        <small>{source.domain || "Document source"} · Open source ↗</small>
                       </button>
                     ))
                   ) : (
@@ -927,8 +950,9 @@ function App() {
               </div>
 
               <p className="answer-disclaimer">
-                This is a plain-language explanation of the selected document,
-                not legal advice or an official eligibility decision.
+                {answer.source_mode === "web_research"
+                  ? "This is a source-grounded web research explanation, not legal advice or an official eligibility decision. Confirm current requirements with the issuing department."
+                  : "This is a plain-language explanation of the selected document, not legal advice or an official eligibility decision."}
               </p>
             </section>
           )}
@@ -972,7 +996,7 @@ function App() {
 
       <footer className="footer">
         <span>© 2026 NitiSaathi</span>
-        <span>9 Indian languages · One selected document at a time</span>
+        <span>9 Indian languages · PDF and web research</span>
       </footer>
     </div>
   );
