@@ -74,6 +74,8 @@ def _grounded_sources(response) -> tuple[list[dict], list[dict]]:
     supports = _field(metadata, "grounding_supports", []) or []
     sources: list[dict] = []
     old_to_new: dict[int, int] = {}
+    candidates: list[tuple[int, dict]] = []
+    seen_urls: set[str] = set()
 
     for old_index, item in enumerate(raw_chunks):
         web = _field(item, "web")
@@ -81,18 +83,24 @@ def _grounded_sources(response) -> tuple[list[dict], list[dict]]:
             continue
         url = _field(web, "uri", "")
         classified = _classify_url(url)
-        if not classified:
+        if not classified or url in seen_urls:
             continue
+        seen_urls.add(url)
         host, source_type = classified
         title = str(_field(web, "title", "") or host)[:300]
-        old_to_new[old_index] = len(sources) + 1
-        sources.append({
-            "source_number": len(sources) + 1,
+        candidates.append((old_index, {
             "title": title,
             "url": url,
             "domain": host,
             "source_type": source_type,
-        })
+        }))
+
+    # Official primary sources always appear before supporting publications.
+    candidates.sort(key=lambda item: item[1]["source_type"] != "official_government")
+    for old_index, source in candidates:
+        source_number = len(sources) + 1
+        old_to_new[old_index] = source_number
+        sources.append({"source_number": source_number, **source})
 
     evidence_by_number: dict[int, list[str]] = {
         item["source_number"]: [] for item in sources
