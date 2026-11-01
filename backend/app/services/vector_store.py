@@ -2,8 +2,6 @@
 from pathlib import Path
 from functools import lru_cache
 
-import chromadb
-from sentence_transformers import SentenceTransformer
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -26,6 +24,8 @@ def get_embedding_model():
     """
     Load the embedding model once and reuse it.
     """
+    from sentence_transformers import SentenceTransformer
+
     return SentenceTransformer(MODEL_NAME)
 
 
@@ -34,6 +34,8 @@ def get_collection():
     Connect to the persistent ChromaDB database.
     """
     CHROMA_DIR.mkdir(parents=True, exist_ok=True)
+
+    import chromadb
 
     client = chromadb.PersistentClient(
         path=str(CHROMA_DIR)
