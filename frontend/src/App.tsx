@@ -787,7 +787,7 @@ function App() {
               <button
                 className="ask-button"
                 type="button"
-                disabled={busy || apiStatus !== "online"}
+                disabled={busy || apiStatus !== "online" || Boolean(file && !documentId)}
                 onClick={() => void ask()}
               >
                 {busy
@@ -798,7 +798,9 @@ function App() {
               <p className="coming-soon">
                 {documentId
                   ? "Using your selected PDF · Shortcut: Ctrl + Enter"
-                  : "No PDF selected — NitiSaathi will automatically research reliable web sources."}
+                  : file
+                    ? "Add this PDF to use it, or clear the selection to research the web."
+                    : "No PDF selected — NitiSaathi will automatically research reliable web sources."}
               </p>
             </section>
           </div>
@@ -824,7 +826,7 @@ function App() {
               <div className="answer-heading">
                 <div>
                   <span className="section-eyebrow">
-                    YOUR EXPLANATION · {answer.answer_language}
+                    {answer.source_mode === "web_research" ? "WEB RESEARCH" : "YOUR EXPLANATION"} · {answer.answer_language}
                   </span>
                   <h2>{answer.question}</h2>
                 </div>
