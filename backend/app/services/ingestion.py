@@ -6,7 +6,8 @@ import fitz
 from fastapi import HTTPException, UploadFile
 from backend.app.services.chunking import create_chunks
 from backend.app.services.vector_store import index_chunks
-
+from backend.app.models.policy import PolicyDocument
+from backend.app.services.indiclid_service import IndicLIDService
 
 # Project storage locations
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -17,7 +18,10 @@ PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
 MAX_FILE_SIZE = 20 * 1024 * 1024  # 20 MB
 
 
-async def ingest_pdf(file: UploadFile) -> dict:
+async def ingest_pdf(
+    file: UploadFile,
+    indiclid_service: IndicLIDService
+) -> dict:
     """
     Validates a PDF, extracts text page by page,
     and stores the original PDF and extracted content.
@@ -96,19 +100,28 @@ async def ingest_pdf(file: UploadFile) -> dict:
     # 6. Generate a unique document ID
     document_id = str(uuid4())
 
-    # 7. Create storage directories
+    # 7. Create structured policy metadata
+    policy_document = PolicyDocument(
+        document_id=document_id,
+        original_filename=file.filename,
+        page_count=len(pages)
+    )
+
+
+    # 8. Create storage directories
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
 
-    # 8. Save original PDF
+    # 9. Save original PDF
     pdf_path = UPLOAD_DIR / f"{document_id}.pdf"
     pdf_path.write_bytes(content)
 
-    # 9. Save extracted text and page metadata
+    # 10. Save extracted text and page metadata
     extracted_data = {
         "document_id": document_id,
         "original_filename": file.filename,
         "page_count": len(pages),
+        "policy_document": policy_document.model_dump(mode="json"),
         "pages": pages
     }
 
@@ -120,10 +133,16 @@ async def ingest_pdf(file: UploadFile) -> dict:
     )
 
 
-    # 10. Create searchable text chunks
+    # 11. Create searchable text chunks
     chunks = create_chunks(extracted_data)
 
-    # 11. Save chunks separately
+    # 12. Detect the language of every chunk
+    for chunk in chunks:
+        language_result = indiclid_service.detect(chunk["text"])
+
+        chunk.update(language_result)
+
+    # 13. Save chunks separately
     chunks_path = PROCESSED_DIR / f"{document_id}_chunks.json"
 
     chunks_path.write_text(
@@ -132,7 +151,7 @@ async def ingest_pdf(file: UploadFile) -> dict:
     )
     indexing_result = index_chunks(chunks)
 
-    # 12. Return document information
+    # 14. Return document information
     return {
         "document_id": document_id,
         "filename": file.filename,
@@ -153,5 +172,6 @@ async def ingest_pdf(file: UploadFile) -> dict:
                 "character_count": page["character_count"]
             }
             for page in pages
-        ]
+        ],
+        "policy_document": policy_document.model_dump(mode="json"),
     }

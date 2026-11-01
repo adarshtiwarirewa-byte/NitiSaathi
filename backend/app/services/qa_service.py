@@ -1,38 +1,65 @@
+
 from backend.app.services.retrieval import search_documents
 from backend.app.services.gemini_service import generate_answer
+
+from backend.app.models.explanation import (
+    EvidenceReference,
+    PolicyExplanation,
+)
 
 
 def answer_question(
     question: str,
     language: str = "English",
     top_k: int = 3
-) -> dict:
+) -> PolicyExplanation:
+    """
+    Retrieve policy evidence, generate a structured explanation,
+    and attach verified source references.
+    """
 
-    # Step 1: Retrieve relevant passages
+    # Step 1: Retrieve relevant passages.
     retrieved_chunks = search_documents(
         question=question,
         top_k=top_k
     )
 
-    # Step 2: Generate an answer using retrieved evidence
-    answer = generate_answer(
+    # Step 2: Generate a structured explanation using Gemini.
+    draft = generate_answer(
         question=question,
         retrieved_chunks=retrieved_chunks,
         language=language
     )
 
-    # Step 3: Prepare source references
+    # Step 3: Construct source references using actual backend data.
     sources = []
 
-    for chunk in retrieved_chunks:
-        sources.append({
-            "filename": chunk["filename"],
-            "page_number": chunk["page_number"]
-        })
+    for source_number, chunk in enumerate(
+        retrieved_chunks,
+        start=1
+    ):
+        sources.append(
+            EvidenceReference(
+                source_number=source_number,
+                document_id=chunk["document_id"],
+                filename=chunk["filename"],
+                page_number=chunk["page_number"],
+                language_label=chunk.get("language_label"),
+                language_code=chunk.get("language_code"),
+                script=chunk.get("script"),
+                detection_model=chunk.get("detection_model"),
+                detection_raw_score=chunk.get(
+                    "detection_raw_score"
+                ),
+            )
+        )
 
-    return {
-        "question": question,
-        "answer": answer,
-        "language": language,
-        "sources": sources
-    }
+    # Step 4: Validate the final explanation and its citations.
+    explanation = PolicyExplanation(
+        question=question,
+        answer_language=language,
+        **draft.model_dump(),
+        sources=sources,
+    )
+
+    return explanation

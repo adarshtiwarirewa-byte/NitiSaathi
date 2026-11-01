@@ -20,17 +20,22 @@ def search_documents(
     model = get_embedding_model()
     collection = get_collection()
 
-    # Convert user question into an embedding
+    # Convert user question into an embedding.
     query_embedding = model.encode(
         ["query: " + question.strip()],
         normalize_embeddings=True,
         convert_to_numpy=True
     )
 
-    # Retrieve similar document chunks
+    collection_count = collection.count()
+
+    if collection_count == 0:
+        return []
+
+    # Retrieve similar document chunks.
     results = collection.query(
         query_embeddings=query_embedding.tolist(),
-        n_results=min(top_k, collection.count()),
+        n_results=min(top_k, collection_count),
         include=["documents", "metadatas", "distances"]
     )
 
@@ -54,7 +59,17 @@ def search_documents(
             "document_id": metadata["document_id"],
             "filename": metadata["filename"],
             "page_number": metadata["page_number"],
-            "distance": distance
+            "distance": distance,
+
+            # Language detection information.
+            "language_label": metadata.get("language_label"),
+            "language_code": metadata.get("language_code"),
+            "script": metadata.get("script"),
+            "detection_model": metadata.get("detection_model"),
+            "detection_raw_score": metadata.get(
+                "detection_raw_score"
+            ),
+            "latin_ratio": metadata.get("latin_ratio"),
         })
 
     return retrieved_chunks

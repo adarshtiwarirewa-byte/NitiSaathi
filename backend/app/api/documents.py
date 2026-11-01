@@ -1,10 +1,13 @@
-from fastapi import APIRouter, UploadFile, File
+from fastapi import APIRouter, UploadFile, File, HTTPException, Request
 
 from backend.app.services.ingestion import ingest_pdf
 from pydantic import BaseModel, Field
 from backend.app.services.retrieval import search_documents
 from backend.app.services.qa_service import answer_question
 
+from backend.app.services.gemini_service import (
+    GeminiServiceUnavailableError,
+)
 
 router = APIRouter()
 
@@ -20,20 +23,27 @@ class AskRequest(BaseModel):
 
 
 @router.post("/upload")
-async def upload_document(file: UploadFile = File(...)):
+async def upload_document(
+    request: Request,
+    file: UploadFile = File(...)
+):
     """
-    Upload a government policy PDF
-    and extract its page-wise text.
+    Upload a government policy PDF,
+    extract its text and identify its languages.
     """
 
-    result = await ingest_pdf(file)
+    indiclid_service = request.app.state.indiclid_service
+
+    result = await ingest_pdf(
+        file,
+        indiclid_service=indiclid_service
+    )
 
     return {
         "success": True,
         "message": "Document uploaded and processed successfully.",
         "document": result,
     }
-
 
 @router.post("/search")
 def search_document(request: SearchRequest):
@@ -52,11 +62,19 @@ def search_document(request: SearchRequest):
 
 @router.post("/ask")
 def ask_question(request: AskRequest):
-    result = answer_question(
-        question=request.question,
-        language=request.language,
-        top_k=request.top_k
-    )
+
+    try:
+        result = answer_question(
+            question=request.question,
+            language=request.language,
+            top_k=request.top_k
+        )
+
+    except GeminiServiceUnavailableError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=str(exc)
+        ) from exc
 
     return {
         "success": True,

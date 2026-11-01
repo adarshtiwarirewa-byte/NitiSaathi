@@ -6,12 +6,19 @@ import chromadb
 from sentence_transformers import SentenceTransformer
 
 
-# Project storage location
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 CHROMA_DIR = PROJECT_ROOT / "data" / "chroma"
 
-# Multilingual embedding model
 MODEL_NAME = "intfloat/multilingual-e5-small"
+
+LANGUAGE_METADATA_FIELDS = (
+    "language_label",
+    "language_code",
+    "script",
+    "detection_model",
+    "detection_raw_score",
+    "latin_ratio",
+)
 
 
 @lru_cache(maxsize=1)
@@ -19,7 +26,6 @@ def get_embedding_model():
     """
     Load the embedding model once and reuse it.
     """
-
     return SentenceTransformer(MODEL_NAME)
 
 
@@ -27,7 +33,6 @@ def get_collection():
     """
     Connect to the persistent ChromaDB database.
     """
-
     CHROMA_DIR.mkdir(parents=True, exist_ok=True)
 
     client = chromadb.PersistentClient(
@@ -45,7 +50,7 @@ def get_collection():
 def index_chunks(chunks: list[dict]) -> dict:
     """
     Convert document chunks into embeddings
-    and store them in ChromaDB.
+    and store them in ChromaDB with language metadata.
     """
 
     if not chunks:
@@ -57,31 +62,42 @@ def index_chunks(chunks: list[dict]) -> dict:
     model = get_embedding_model()
     collection = get_collection()
 
-    # Prepare text for multilingual E5
+    # Prepare text for multilingual E5.
     texts = [
         "passage: " + chunk["text"]
         for chunk in chunks
     ]
 
-    # Generate numerical embeddings
+    # Generate numerical embeddings.
     embeddings = model.encode(
         texts,
         normalize_embeddings=True,
         convert_to_numpy=True
     )
 
-    # Prepare metadata
-    metadatas = [
-        {
+    # Prepare metadata.
+    metadatas = []
+
+    for chunk in chunks:
+        metadata = {
             "document_id": chunk["document_id"],
             "filename": chunk["filename"],
             "page_number": chunk["page_number"],
-            "word_count": chunk["word_count"]
+            "word_count": chunk["word_count"],
         }
-        for chunk in chunks
-    ]
 
-    # Store embeddings and original text
+        # Add language information when available.
+        # Optional fields allow older chunks and existing tests
+        # to continue working.
+        for field in LANGUAGE_METADATA_FIELDS:
+            value = chunk.get(field)
+
+            if value is not None:
+                metadata[field] = value
+
+        metadatas.append(metadata)
+
+    # Store embeddings, original text and metadata.
     collection.upsert(
         ids=[chunk["chunk_id"] for chunk in chunks],
         documents=[chunk["text"] for chunk in chunks],

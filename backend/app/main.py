@@ -1,15 +1,54 @@
+
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from backend.app.api.documents import router as documents_router
 
-# Create our FastAPI application
+from backend.app.api.documents import router as documents_router
+from backend.app.services.indiclid_service import IndicLIDService
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Initialize shared machine-learning resources at startup
+    and release application references at shutdown.
+    """
+
+    print("\n--- Starting NitiSaathi ---")
+    print("Initializing IndicLID service...")
+
+    # Load FTN, FTR, BERT and the tokenizer once.
+    service = IndicLIDService()
+
+    # Make the same service available throughout the application.
+    app.state.indiclid_service = service
+
+    print("IndicLID service ready.")
+    print("NitiSaathi is ready to accept requests.\n")
+
+    try:
+        yield
+
+    finally:
+        # Remove the application's reference to the models.
+        app.state.indiclid_service = None
+        del service
+
+        print("\nIndicLID service references released.")
+        print("NitiSaathi shutting down.")
+
+
+# Create our FastAPI application.
 app = FastAPI(
     title="NitiSaathi API",
     description="Multilingual Government Policy Explainer",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
-# Allow our React frontend to communicate with the backend
+
+# Allow our React frontend to communicate with the backend.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -21,7 +60,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(documents_router, prefix="/documents", tags=["Documents"])   
+
+# Register document API routes.
+app.include_router(
+    documents_router,
+    prefix="/documents",
+    tags=["Documents"],
+)
+
 
 @app.get("/")
 def home():
