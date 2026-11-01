@@ -6,7 +6,6 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.app.api.documents import router as documents_router
 from backend.app.api.research import router as research_router
-from backend.app.services.indiclid_service import IndicLIDService
 
 
 @asynccontextmanager
