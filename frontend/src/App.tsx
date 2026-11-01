@@ -12,11 +12,60 @@ const sampleQuestions = [
 ];
 
 type ApiStatus = "checking" | "online" | "offline";
+type UploadStatus = "idle" | "uploading" | "uploaded" | "error";
+type AskStatus = "idle" | "asking";
+
+type UploadedDocument = {
+  document_id: string;
+  filename: string;
+  page_count: number;
+  indexed_chunks: number;
+  warnings?: string[];
+};
+
+type AskAnswer = {
+  answer: string;
+  language: string;
+  sources: Array<{ filename: string; page_number: number }>;
+};
+
+type ApiErrorPayload = {
+  detail?: unknown;
+  message?: unknown;
+};
+
+function getApiErrorMessage(
+  payload: ApiErrorPayload | null,
+  fallback: string,
+) {
+  const detail = payload?.detail;
+
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item) => {
+        if (item && typeof item === "object" && "msg" in item) {
+          return String(item.msg);
+        }
+        return String(item);
+      })
+      .join("; ");
+  }
+  if (typeof payload?.message === "string") return payload.message;
+  return fallback;
+}
 
 function App() {
   const [language, setLanguage] = useState("Hindi");
   const [file, setFile] = useState<File | null>(null);
+  const [uploadStatus, setUploadStatus] = useState<UploadStatus>("idle");
+  const [uploadedDocument, setUploadedDocument] =
+    useState<UploadedDocument | null>(null);
+  const [uploadError, setUploadError] = useState("");
   const [question, setQuestion] = useState("");
+  const [askStatus, setAskStatus] = useState<AskStatus>("idle");
+  const [askError, setAskError] = useState("");
+  const [answer, setAnswer] = useState<AskAnswer | null>(null);
   const [apiStatus, setApiStatus] = useState<ApiStatus>("checking");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -44,22 +93,121 @@ function App() {
     };
   }, []);
 
-  // Handle PDF selection.
+  const uploadDocument = async (selectedFile: File) => {
+    setUploadStatus("uploading");
+    setUploadError("");
+    setUploadedDocument(null);
+    setAnswer(null);
+    setAskError("");
+    setAskStatus("idle");
+
+    const formData = new FormData();
+    formData.append("file", selectedFile);
+
+    try {
+      const response = await fetch(`${API_URL}/documents/upload`, {
+        method: "POST",
+        body: formData,
+      });
+      const payload = (await response.json().catch(() => null)) as
+        | ({ success?: boolean; document?: UploadedDocument } & ApiErrorPayload)
+        | null;
+
+      if (!response.ok) {
+        throw new Error(
+          getApiErrorMessage(payload, `Upload failed (${response.status}).`),
+        );
+      }
+      if (!payload?.success || !payload.document) {
+        throw new Error("The backend did not return uploaded document details.");
+      }
+
+      setUploadedDocument(payload.document);
+      setUploadStatus("uploaded");
+    } catch (error) {
+      setUploadStatus("error");
+      setUploadError(
+        error instanceof Error
+          ? error.message
+          : "The PDF could not be uploaded.",
+      );
+    }
+  };
+
+  // Validate and upload the selected PDF to the backend.
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = event.target.files?.[0];
+    const input = event.currentTarget;
+    const selectedFile = input.files?.[0];
+    input.value = "";
 
     if (!selectedFile) return;
+
+    setFile(selectedFile);
+    setUploadStatus("idle");
+    setUploadedDocument(null);
+    setUploadError("");
+    setAnswer(null);
+    setAskError("");
 
     if (
       selectedFile.type !== "application/pdf" &&
       !selectedFile.name.toLowerCase().endsWith(".pdf")
     ) {
-      alert("Please select a PDF document.");
-      event.target.value = "";
+      setUploadStatus("error");
+      setUploadError("Please select a PDF document.");
       return;
     }
 
-    setFile(selectedFile);
+    if (selectedFile.size > 20 * 1024 * 1024) {
+      setUploadStatus("error");
+      setUploadError("This PDF is larger than the 20 MB upload limit.");
+      return;
+    }
+
+    void uploadDocument(selectedFile);
+  };
+
+  const handleAsk = async () => {
+    const trimmedQuestion = question.trim();
+    if (!uploadedDocument || !trimmedQuestion) return;
+
+    setAskStatus("asking");
+    setAskError("");
+    setAnswer(null);
+
+    try {
+      const response = await fetch(`${API_URL}/documents/ask`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          question: trimmedQuestion,
+          language,
+          top_k: 3,
+        }),
+      });
+      const payload = (await response.json().catch(() => null)) as
+        | ({ success?: boolean; result?: AskAnswer } & ApiErrorPayload)
+        | null;
+
+      if (!response.ok) {
+        throw new Error(
+          getApiErrorMessage(payload, `Could not get an answer (${response.status}).`),
+        );
+      }
+      if (!payload?.success || !payload.result?.answer) {
+        throw new Error("The backend did not return an answer.");
+      }
+
+      setAnswer(payload.result);
+    } catch (error) {
+      setAskError(
+        error instanceof Error
+          ? error.message
+          : "Could not get an answer. Please try again.",
+      );
+    } finally {
+      setAskStatus("idle");
+    }
   };
 
   const formatFileSize = (bytes: number) => {
@@ -174,25 +322,63 @@ function App() {
                 className={`upload-area ${file ? "has-file" : ""}`}
                 onClick={() => fileInputRef.current?.click()}
                 type="button"
+                disabled={uploadStatus === "uploading"}
               >
                 <span className="upload-icon">
-                  {file ? "✓" : "↑"}
+                  {uploadStatus === "uploading"
+                    ? "…"
+                    : uploadStatus === "error"
+                      ? "!"
+                      : uploadedDocument
+                        ? "✓"
+                        : "↑"}
                 </span>
 
                 {file ? (
                   <>
                     <strong>{file.name}</strong>
                     <span>{formatFileSize(file.size)}</span>
-                    <small>Click to choose another PDF</small>
+                    <small>
+                      {uploadStatus === "uploading"
+                        ? "Uploading and processing…"
+                        : uploadedDocument
+                          ? "Uploaded · click to choose another PDF"
+                          : uploadStatus === "error"
+                            ? "Upload failed · click to try another PDF"
+                            : "Click to choose another PDF"}
+                    </small>
                   </>
                 ) : (
                   <>
                     <strong>Upload a policy document</strong>
                     <span>Click to browse files on your device</span>
-                    <small>PDF files only · Maximum size to be configured</small>
+                    <small>PDF files only · Maximum size 20 MB</small>
                   </>
                 )}
               </button>
+
+              {uploadStatus === "uploading" && (
+                <p className="action-status" role="status" aria-live="polite">
+                  Uploading and processing your PDF. The first upload may take
+                  longer while the search model loads.
+                </p>
+              )}
+              {uploadedDocument && (
+                <p className="action-status success" role="status">
+                  Ready to ask · {uploadedDocument.page_count} pages ·{" "}
+                  {uploadedDocument.indexed_chunks} searchable sections
+                </p>
+              )}
+              {uploadError && (
+                <p className="action-status error" role="alert">
+                  {uploadError}
+                </p>
+              )}
+              {uploadedDocument?.warnings?.map((warning) => (
+                <p className="action-status warning" key={warning}>
+                  {warning}
+                </p>
+              ))}
 
               <div className="privacy-note">
                 <span>⌑</span>
@@ -217,7 +403,11 @@ function App() {
                 id="language"
                 className="language-select"
                 value={language}
-                onChange={(event) => setLanguage(event.target.value)}
+                onChange={(event) => {
+                  setLanguage(event.target.value);
+                  setAnswer(null);
+                  setAskError("");
+                }}
               >
                 <option value="Hindi">हिन्दी (Hindi)</option>
                 <option value="English">English</option>
@@ -236,7 +426,12 @@ function App() {
                     : "For example: Am I eligible for this scheme?"
                 }
                 value={question}
-                onChange={(event) => setQuestion(event.target.value)}
+                maxLength={1000}
+                onChange={(event) => {
+                  setQuestion(event.target.value);
+                  setAnswer(null);
+                  setAskError("");
+                }}
                 rows={3}
               />
 
@@ -247,7 +442,11 @@ function App() {
                   <button
                     key={sample}
                     type="button"
-                    onClick={() => setQuestion(sample)}
+                    onClick={() => {
+                      setQuestion(sample);
+                      setAnswer(null);
+                      setAskError("");
+                    }}
                     className="sample-chip"
                   >
                     {sample}
@@ -259,15 +458,51 @@ function App() {
               <button
                 className="ask-button"
                 type="button"
-                disabled
-                title="Question answering will be enabled in the next milestone"
+                disabled={
+                  !uploadedDocument || !question.trim() || askStatus === "asking"
+                }
+                onClick={() => void handleAsk()}
               >
-                Ask about this policy <span>→</span>
+                {askStatus === "asking" ? "Finding an answer…" : "Ask about this policy"}
+                <span>→</span>
               </button>
 
-              <p className="coming-soon">
-                Document processing and AI answers are our next milestone.
-              </p>
+              {!uploadedDocument && !uploadError && (
+                <p className="coming-soon">
+                  Upload a PDF to enable questions about its contents.
+                </p>
+              )}
+              {askError && (
+                <p className="action-status error" role="alert">
+                  {askError}
+                </p>
+              )}
+              {answer && (
+                <section className="answer-card" aria-live="polite">
+                  <div className="answer-heading">
+                    <div>
+                      <span className="section-eyebrow">ANSWER</span>
+                      <h4>Here’s what the policy says</h4>
+                    </div>
+                    <span className="answer-language">{answer.language}</span>
+                  </div>
+                  <p className="answer-text">{answer.answer}</p>
+                  <div className="answer-sources">
+                    <strong>Sources</strong>
+                    {answer.sources.length > 0 ? (
+                      <ul>
+                        {answer.sources.map((source, index) => (
+                          <li key={`${source.filename}-${source.page_number}-${index}`}>
+                            {source.filename} · page {source.page_number}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p>No source passages were returned for this answer.</p>
+                    )}
+                  </div>
+                </section>
+              )}
             </section>
           </div>
         </section>
