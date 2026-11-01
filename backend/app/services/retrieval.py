@@ -7,7 +7,8 @@ from backend.app.services.vector_store import (
 
 def search_documents(
     question: str,
-    top_k: int = 3
+    top_k: int = 3,
+    document_id: str | None = None,
 ) -> list[dict]:
     """
     Search for the most relevant document chunks
@@ -36,7 +37,8 @@ def search_documents(
     results = collection.query(
         query_embeddings=query_embedding.tolist(),
         n_results=min(top_k, collection_count),
-        include=["documents", "metadatas", "distances"]
+        include=["documents", "metadatas", "distances"],
+        where={"document_id": document_id} if document_id else None,
     )
 
     retrieved_chunks = []

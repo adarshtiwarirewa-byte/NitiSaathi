@@ -16,15 +16,8 @@ async def lifespan(app: FastAPI):
     """
 
     print("\n--- Starting NitiSaathi ---")
-    print("Initializing IndicLID service...")
-
-    # Load FTN, FTR, BERT and the tokenizer once.
-    service = IndicLIDService()
-
-    # Make the same service available throughout the application.
-    app.state.indiclid_service = service
-
-    print("IndicLID service ready.")
+    # Load the large language detector only when an upload needs it.
+    app.state.indiclid_service = None
     print("NitiSaathi is ready to accept requests.\n")
 
     try:
@@ -33,7 +26,6 @@ async def lifespan(app: FastAPI):
     finally:
         # Remove the application's reference to the models.
         app.state.indiclid_service = None
-        del service
 
         print("\nIndicLID service references released.")
         print("NitiSaathi shutting down.")

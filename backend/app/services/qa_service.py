@@ -11,7 +11,8 @@ from backend.app.models.explanation import (
 def answer_question(
     question: str,
     language: str = "English",
-    top_k: int = 3
+    top_k: int = 3,
+    document_id: str | None = None,
 ) -> PolicyExplanation:
     """
     Retrieve policy evidence, generate a structured explanation,
@@ -19,10 +20,10 @@ def answer_question(
     """
 
     # Step 1: Retrieve relevant passages.
-    retrieved_chunks = search_documents(
-        question=question,
-        top_k=top_k
-    )
+    search_args = {"question": question, "top_k": top_k}
+    if document_id:
+        search_args["document_id"] = document_id
+    retrieved_chunks = search_documents(**search_args)
 
     # Step 2: Generate a structured explanation using Gemini.
     draft = generate_answer(

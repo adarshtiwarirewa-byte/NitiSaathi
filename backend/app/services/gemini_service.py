@@ -20,7 +20,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 load_dotenv(PROJECT_ROOT / ".env")
 
-MODEL_NAME = "gemini-3.8-flash"
+MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
 
 class GeminiServiceUnavailableError(RuntimeError):
     """Raised when Gemini's server is temporarily unavailable."""
@@ -197,6 +197,10 @@ Produce a complete structured policy explanation.
             "The AI explanation service is temporarily unavailable. "
             "Please retry your request."
         ) from exc
+    except Exception as exc:
+        raise GeminiServiceUnavailableError(
+            "The AI explanation service could not complete this request. Check the API key and try again."
+        ) from exc
 
     # Prefer the SDK's parsed Pydantic response.
     parsed = response.parsed
@@ -216,3 +220,5 @@ Produce a complete structured policy explanation.
     raise RuntimeError(
         "Gemini did not return a valid structured explanation."
     )
+
+
