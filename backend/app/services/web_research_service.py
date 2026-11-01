@@ -154,7 +154,6 @@ def research_policy(
     if not question or not question.strip():
         raise ValueError("Question cannot be empty.")
 
-    client = get_gemini_client()
     search_prompt = f"""
 You are the source-discovery component of NitiSaathi, an Indian government
 policy research assistant.
@@ -177,6 +176,10 @@ English-language official sources where useful.
 """
 
     try:
+        # Keep client creation inside this diagnostic boundary too: missing or
+        # malformed credentials must produce an actionable error, not a vague
+        # search-connectivity message.
+        client = get_gemini_client()
         response = client.models.generate_content(
             model=MODEL_NAME,
             contents=search_prompt,
@@ -186,10 +189,22 @@ English-language official sources where useful.
             ),
         )
     except Exception as exc:
-        logger.exception("Google Search-grounded discovery failed")
+        logger.exception(
+            "Google Search grounding failed (model=%s, exception=%s)",
+            MODEL_NAME,
+            type(exc).__name__,
+        )
+        # The Google SDK error text normally contains the actionable HTTP
+        # status/reason. Bound it and redact any API-key-shaped strings before
+        # returning a useful local-development diagnostic to the UI.
+        detail = str(exc).replace("\\n", " ").strip()[:600]
+        import re
+        detail = re.sub(r"AIza[0-9A-Za-z_-]{20,}", "[REDACTED_API_KEY]", detail)
+        if not detail:
+            detail = "No additional error details were provided by the SDK."
         raise WebResearchUnavailableError(
-            "Web research could not reach Google Search grounding. "
-            "Check GEMINI_API_KEY, model access, and internet connectivity."
+            f"Google Search grounding failed ({type(exc).__name__}). "
+            f"Model: {MODEL_NAME}. Details: {detail}"
         ) from exc
 
     retrieved_chunks, sources = _grounded_sources(response)
