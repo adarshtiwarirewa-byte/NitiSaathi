@@ -328,6 +328,7 @@ function App() {
     stopSpeech();
     setError("");
     setFile(selected);
+    setDocumentId("");
     setAnswer(null);
     setPage(null);
     setNotice("");
@@ -377,6 +378,10 @@ function App() {
   const ask = async (prompt = question) => {
     if (!prompt.trim()) {
       setError("Write a question or choose a sample question first.");
+      return;
+    }
+    if (file && !documentId) {
+      setError("Your PDF is selected but not indexed yet. Click “Add this document” first.");
       return;
     }
     stopSpeech();
