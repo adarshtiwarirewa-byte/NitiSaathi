@@ -206,6 +206,7 @@ English-language official sources where useful.
     for source in sources:
         source_records.append({
             **source,
+            "filename": source["title"],
             "retrieved_at": datetime.now(timezone.utc).isoformat(),
         })
 
