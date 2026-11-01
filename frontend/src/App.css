@@ -445,6 +445,45 @@ main {
   opacity: 0.65;
 }
 
+.document-select { margin-bottom: 2px; }
+.or-divider { display: flex; align-items: center; gap: 10px; margin: 18px 0 12px; color: #91a096; font-size: 9px; font-weight: 800; letter-spacing: 1px; }
+.or-divider::before, .or-divider::after { content: ""; height: 1px; flex: 1; background: #e9eee9; }
+.secondary-button, .listen-button { display: flex; align-items: center; justify-content: space-between; gap: 14px; border: 1px solid #dce8df; border-radius: 8px; background: #f5f8f4; color: #285b45; padding: 12px 14px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.secondary-button { width: 100%; margin-top: 12px; }
+.secondary-button:disabled { opacity: .65; cursor: progress; }
+.feedback { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-top: 16px; padding: 12px 15px; border-radius: 8px; font-size: 12px; line-height: 1.6; }
+.feedback-error { color: #8d3838; background: #fff0ee; border: 1px solid #f2d5d1; }
+.feedback-success { color: #286448; background: #eef7ef; border: 1px solid #d8eadb; }
+.feedback button, .page-actions button { border: 0; background: transparent; color: inherit; font-size: 20px; cursor: pointer; }
+.answer-card, .page-viewer { margin-top: 22px; padding: 28px; border: 1px solid #e5ece6; border-radius: 14px; background: #fff; }
+.answer-heading, .page-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding-bottom: 20px; border-bottom: 1px solid #e9eee9; }
+.answer-heading h2, .page-heading h2 { margin: 8px 0 0; font-size: 21px; line-height: 1.4; color: #1e3d33; }
+.listen-button { justify-content: center; flex-shrink: 0; }
+.answer-grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(200px, .7fr); gap: 28px; padding-top: 16px; }
+.answer-section { padding: 15px 0 17px; border-bottom: 1px solid #edf1ed; }
+.answer-section h3, .source-list h3 { margin: 0 0 11px; font-size: 14px; color: #254b3b; }
+.answer-point + .answer-point { margin-top: 13px; }
+.answer-point p { margin: 0 0 7px; color: #465b4e; font-size: 13px; line-height: 1.8; }
+.basis-label { color: #8a978f; font-size: 10px; }
+.point-citations { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 8px; }
+.citation-chip { border: 1px solid #dce9df; border-radius: 20px; padding: 5px 9px; background: #f5f9f5; color: #286448; font-size: 10px; cursor: pointer; }
+.citation-chip:hover, .source-card:hover { border-color: #8cb49a; background: #f0f7f0; }
+.source-list { padding: 15px 0; }
+.source-card { width: 100%; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin: 9px 0; padding: 12px; text-align: left; border: 1px solid #e3ebe4; border-radius: 8px; background: #fff; cursor: pointer; }
+.source-card span { width: 100%; display: flex; justify-content: space-between; color: #75857b; font-size: 10px; }
+.source-card span b { color: #a17a41; }
+.source-card strong { color: #355744; font-size: 11px; overflow-wrap: anywhere; }
+.source-card small { color: #52806c; font-size: 10px; }
+.source-empty { color: #8a978f; font-size: 12px; line-height: 1.6; }
+.missing-info { margin-top: 18px; padding: 15px; border: 1px solid #f0e4c9; border-radius: 8px; background: #fdf9ef; color: #645b47; font-size: 12px; line-height: 1.7; }
+.missing-info ul { margin: 7px 0 0; padding-left: 20px; }
+.missing-info p { margin-bottom: 0; }
+.answer-disclaimer { margin: 18px 0 0; padding-top: 14px; border-top: 1px solid #edf1ed; color: #8a978f; font-size: 10px; line-height: 1.7; }
+.page-viewer { background: #fbfcf9; }
+.page-actions { display: flex; align-items: center; gap: 14px; }
+.page-actions a { color: #286448; font-size: 12px; font-weight: 700; text-decoration: none; white-space: nowrap; }
+.page-text { max-height: 420px; overflow: auto; white-space: pre-wrap; color: #4b5d51; font-family: Georgia, serif; font-size: 13px; line-height: 1.9; }
+
 .coming-soon {
   margin: 10px 0 0;
   color: #9aa69d;
@@ -498,6 +537,8 @@ main {
     grid-template-columns: 1fr;
   }
 
+  .answer-grid { grid-template-columns: 1fr; gap: 8px; }
+
   .panel {
     min-height: auto;
   }
@@ -544,4 +585,9 @@ main {
     flex-direction: column;
     padding: 20px 5%;
   }
+
+  .answer-card, .page-viewer { padding: 18px; }
+  .answer-heading { flex-direction: column; }
+  .page-heading h2 { font-size: 16px; }
+  .page-actions { gap: 7px; }
 }

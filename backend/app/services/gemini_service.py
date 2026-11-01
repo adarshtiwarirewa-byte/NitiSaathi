@@ -22,6 +22,38 @@ load_dotenv(PROJECT_ROOT / ".env")
 
 MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
 
+LANGUAGE_OUTPUT_RULES = {
+    "hindi": "Hindi (हिन्दी). Write natural-language content in Devanagari script.",
+    "hi-in": "Hindi (हिन्दी). Write natural-language content in Devanagari script.",
+    "english": "Indian English. Write natural-language content in English using Latin script.",
+    "en-in": "Indian English. Write natural-language content in English using Latin script.",
+    "bengali": "Bengali (বাংলা). Write natural-language content in Bengali script.",
+    "bn-in": "Bengali (বাংলা). Write natural-language content in Bengali script.",
+    "gujarati": "Gujarati (ગુજરાતી). Write natural-language content in Gujarati script.",
+    "gu-in": "Gujarati (ગુજરાતી). Write natural-language content in Gujarati script.",
+    "kannada": "Kannada (ಕನ್ನಡ). Write natural-language content in Kannada script.",
+    "kn-in": "Kannada (ಕನ್ನಡ). Write natural-language content in Kannada script.",
+    "marathi": "Marathi (मराठी). Write natural-language content in Devanagari script. Use Marathi vocabulary and grammar, not Hindi.",
+    "mr-in": "Marathi (मराठी). Write natural-language content in Devanagari script. Use Marathi vocabulary and grammar, not Hindi.",
+    "punjabi": "Indian Punjabi (ਪੰਜਾਬੀ). Write natural-language content in Gurmukhi script.",
+    "pa-in": "Indian Punjabi (ਪੰਜਾਬੀ). Write natural-language content in Gurmukhi script.",
+    "tamil": "Tamil (தமிழ்). Write natural-language content in Tamil script.",
+    "ta-in": "Tamil (தமிழ்). Write natural-language content in Tamil script.",
+    "telugu": "Telugu (తెలుగు). Write natural-language content in Telugu script.",
+    "te-in": "Telugu (తెలుగు). Write natural-language content in Telugu script.",
+}
+
+
+def _answer_language_instruction(language: str) -> str:
+    """Resolve the selected UI language to an explicit language-and-script rule."""
+    normalized = str(language or "English").strip().lower()
+    safe_fallback = str(language or "English").strip()[:80] or "English"
+    return LANGUAGE_OUTPUT_RULES.get(
+        normalized,
+        f"{safe_fallback}. Use that language's native script where applicable.",
+    )
+
+
 class GeminiServiceUnavailableError(RuntimeError):
     """Raised when Gemini's server is temporarily unavailable."""
     pass
@@ -117,11 +149,22 @@ def generate_answer(
 
     context = "\n".join(context_parts)
 
+    target_language_rule = _answer_language_instruction(language)
+
     prompt = f"""
 You are NitiSaathi, a multilingual government policy explainer.
 
 Your responsibility is to explain government policies
 accurately and clearly to Indian citizens and small businesses.
+
+HIGHEST-PRIORITY OUTPUT LANGUAGE RULE:
+The selected answer language is: {target_language_rule}
+Write EVERY human-readable value in the JSON in this selected language and
+script, including all point text and information_not_found entries.
+The source documents may be written in another language. Translate the supported
+facts into the selected answer language; do not copy the source language.
+Never answer in Hindi unless Hindi is the selected answer language.
+Keep JSON property names and enum values exactly as required by the schema.
 
 USER QUESTION:
 {question}
@@ -168,7 +211,8 @@ IMPORTANT INSTRUCTIONS:
 10. Explain technical and legal language in simple,
     beginner-friendly words.
 
-11. Write all explanation points in the preferred answer language.
+11. Write all explanation points in the preferred answer language and script.
+    Do not return Hindi when another language is selected.
 
 12. Add important missing information to information_not_found.
 

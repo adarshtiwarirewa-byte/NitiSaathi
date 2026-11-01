@@ -23,6 +23,7 @@ google-genai==2.34.0
 
 # Environment configuration
 python-dotenv==1.2.4
+httpx==0.28.1
 
 # Testing
 pytest==9.2.0

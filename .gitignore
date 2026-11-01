@@ -19,6 +19,7 @@ data/chroma/
 data/uploads/
 data/processed/
 data/models/
+data/ocr/tessdata/
 
 # Frontend dependencies and build output
 frontend/node_modules/

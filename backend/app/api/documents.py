@@ -1,27 +1,26 @@
 import json
 from pathlib import Path
 
-from fastapi import APIRouter, UploadFile, File, HTTPException, Request
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Request
 from fastapi.responses import FileResponse, Response
+from pydantic import BaseModel, Field
 
 from backend.app.services.ingestion import ingest_pdf
-from pydantic import BaseModel, Field
 from backend.app.services.retrieval import search_documents
 from backend.app.services.qa_service import answer_question
 from backend.app.services.indiclid_service import IndicLIDService
-
-from backend.app.services.gemini_service import (
-    GeminiServiceUnavailableError,
-)
+from backend.app.services.gemini_service import GeminiServiceUnavailableError
 from backend.app.services.sarvam_tts_service import (
     SarvamTTSUnavailableError,
     generate_speech,
 )
 
+
 router = APIRouter()
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
 UPLOAD_DIR = PROJECT_ROOT / "data" / "uploads"
+
 
 class SearchRequest(BaseModel):
     question: str = Field(..., min_length=1, max_length=1000)
@@ -37,19 +36,20 @@ class AskRequest(BaseModel):
 
 class SpeakRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=2500)
-    language_code: str = Field(..., pattern="^(en-IN|hi-IN|bn-IN|gu-IN|kn-IN|mr-IN|pa-IN|ta-IN|te-IN)$")
+    language_code: str = Field(
+        ...,
+        pattern="^(en-IN|hi-IN|bn-IN|gu-IN|kn-IN|mr-IN|pa-IN|ta-IN|te-IN)$",
+    )
     speaker: str = Field(..., min_length=3, max_length=80)
 
 
 @router.post("/upload")
 async def upload_document(
     request: Request,
-    file: UploadFile = File(...)
+    file: UploadFile = File(...),
+    document_language: str = Form(default="auto"),
 ):
-    """
-    Upload a government policy PDF,
-    extract its text and identify its languages.
-    """
+    """Upload a policy PDF; detect its source language automatically by default."""
 
     indiclid_service = request.app.state.indiclid_service
     if indiclid_service is None:
@@ -59,12 +59,16 @@ async def upload_document(
         except Exception as exc:
             raise HTTPException(
                 status_code=503,
-                detail="The document language detector could not start. Check that its model files are installed.",
+                detail=(
+                    "The document language detector could not start. "
+                    "Check that its model files are installed."
+                ),
             ) from exc
 
     result = await ingest_pdf(
         file,
-        indiclid_service=indiclid_service
+        indiclid_service=indiclid_service,
+        document_language=document_language,
     )
 
     return {
@@ -77,9 +81,11 @@ async def upload_document(
 @router.get("")
 def list_documents():
     """List documents already uploaded in this local demo."""
+
     documents = []
     if not PROCESSED_DIR.exists():
         return {"documents": documents}
+
     for path in PROCESSED_DIR.glob("*.json"):
         if path.name.endswith("_chunks.json"):
             continue
@@ -92,19 +98,31 @@ def list_documents():
             })
         except (OSError, ValueError, KeyError):
             continue
-    return {"documents": sorted(documents, key=lambda item: item["filename"].lower())}
+
+    return {
+        "documents": sorted(
+            documents,
+            key=lambda item: item["filename"].lower(),
+        )
+    }
 
 
 @router.get("/{document_id}/pages/{page_number}")
 def get_document_page(document_id: str, page_number: int):
     """Return extracted page text for a citation preview."""
+
     path = PROCESSED_DIR / f"{document_id}.json"
     if not path.exists():
         raise HTTPException(status_code=404, detail="Document not found.")
+
     record = json.loads(path.read_text(encoding="utf-8"))
-    page = next((p for p in record.get("pages", []) if p["page_number"] == page_number), None)
+    page = next(
+        (item for item in record.get("pages", []) if item["page_number"] == page_number),
+        None,
+    )
     if page is None:
         raise HTTPException(status_code=404, detail="Page not found.")
+
     return {"filename": record.get("original_filename"), **page}
 
 
@@ -113,31 +131,33 @@ def get_document_file(document_id: str):
     path = UPLOAD_DIR / f"{document_id}.pdf"
     if not path.exists():
         raise HTTPException(status_code=404, detail="Document file not found.")
+
     record_path = PROCESSED_DIR / f"{document_id}.json"
     filename = "policy.pdf"
     if record_path.exists():
         record = json.loads(record_path.read_text(encoding="utf-8"))
         filename = record.get("original_filename", filename)
+
     return FileResponse(path, media_type="application/pdf", filename=filename)
+
 
 @router.post("/search")
 def search_document(request: SearchRequest):
     results = search_documents(
         question=request.question,
-        top_k=request.top_k
+        top_k=request.top_k,
     )
 
     return {
         "success": True,
         "question": request.question,
         "results_count": len(results),
-        "results": results
+        "results": results,
     }
 
 
 @router.post("/ask")
 def ask_question(request: AskRequest):
-
     try:
         result = answer_question(
             question=request.question,
@@ -145,22 +165,19 @@ def ask_question(request: AskRequest):
             top_k=request.top_k,
             document_id=request.document_id,
         )
-
     except (GeminiServiceUnavailableError, ValueError, RuntimeError) as exc:
         raise HTTPException(
             status_code=503,
-            detail=str(exc) or "The explanation service is unavailable."
+            detail=str(exc) or "The explanation service is unavailable.",
         ) from exc
 
-    return {
-        "success": True,
-        "result": result
-    }
+    return {"success": True, "result": result}
 
 
 @router.post("/speak")
 def speak_explanation(request: SpeakRequest):
     """Return a WAV narration of an existing plain-language answer."""
+
     try:
         audio = generate_speech(
             request.text,
@@ -169,8 +186,11 @@ def speak_explanation(request: SpeakRequest):
         )
     except (SarvamTTSUnavailableError, ValueError, RuntimeError) as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+
     return Response(
         content=audio,
         media_type="audio/wav",
-        headers={"Content-Disposition": "inline; filename=niti-saathi-explanation.wav"},
+        headers={
+            "Content-Disposition": "inline; filename=niti-saathi-explanation.wav"
+        },
     )

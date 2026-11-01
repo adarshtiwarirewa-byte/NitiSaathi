@@ -1,6 +1,5 @@
-
 from backend.app.services.retrieval import search_documents
-from backend.app.services.gemini_service import generate_answer
+from backend.app.services.llm_service import generate_answer
 
 from backend.app.models.explanation import (
     EvidenceReference,
@@ -14,10 +13,7 @@ def answer_question(
     top_k: int = 3,
     document_id: str | None = None,
 ) -> PolicyExplanation:
-    """
-    Retrieve policy evidence, generate a structured explanation,
-    and attach verified source references.
-    """
+    """Retrieve policy evidence, generate an explanation, and attach citations."""
 
     # Step 1: Retrieve relevant passages.
     search_args = {"question": question, "top_k": top_k}
@@ -25,20 +21,16 @@ def answer_question(
         search_args["document_id"] = document_id
     retrieved_chunks = search_documents(**search_args)
 
-    # Step 2: Generate a structured explanation using Gemini.
+    # Step 2: Generate a structured explanation using the configured LLM.
     draft = generate_answer(
         question=question,
         retrieved_chunks=retrieved_chunks,
-        language=language
+        language=language,
     )
 
     # Step 3: Construct source references using actual backend data.
     sources = []
-
-    for source_number, chunk in enumerate(
-        retrieved_chunks,
-        start=1
-    ):
+    for source_number, chunk in enumerate(retrieved_chunks, start=1):
         sources.append(
             EvidenceReference(
                 source_number=source_number,
@@ -49,13 +41,11 @@ def answer_question(
                 language_code=chunk.get("language_code"),
                 script=chunk.get("script"),
                 detection_model=chunk.get("detection_model"),
-                detection_raw_score=chunk.get(
-                    "detection_raw_score"
-                ),
+                detection_raw_score=chunk.get("detection_raw_score"),
             )
         )
 
-    # Step 4: Validate the final explanation and its citations.
+    # Step 4: Validate the final explanation and every citation.
     explanation = PolicyExplanation(
         question=question,
         answer_language=language,
