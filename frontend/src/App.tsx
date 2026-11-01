@@ -262,10 +262,6 @@ function App() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const speechAbortRef = useRef<AbortController | null>(null);
 
-  const selectedDocument = documents.find(
-    (doc) => doc.document_id === documentId,
-  );
-
   const refreshDocuments = async (): Promise<DocumentInfo[]> => {
     const response = await fetch(`${API_URL}/documents`);
     if (!response.ok) throw new Error("Could not load the policy library.");
@@ -641,8 +637,8 @@ function App() {
           <div className="section-heading">
             <div>
               <span className="section-eyebrow">YOUR POLICY DESK</span>
-              <h2>Understand a document.</h2>
-              <p>Choose a policy, ask a practical question, and check the evidence.</p>
+              <h2>Understand a policy.</h2>
+              <p>Choose a PDF or ask without one. NitiSaathi will find the evidence.</p>
             </div>
             <span className="step-label">2 SIMPLE STEPS</span>
           </div>
